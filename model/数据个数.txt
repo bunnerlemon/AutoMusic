@@ -1,0 +1,6 @@
+notes_num = 85
+train_notes:embedding-size=20,SGD:0.765
+
+train_notes:embedding-size=100, Adam:0.7597
+
+chord_num = 195
