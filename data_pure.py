@@ -16,6 +16,18 @@ midi原文件路径：music_data
 
 
 def data_pure():
+    '''
+    midi原文件路径：music_data  
+
+    对于任意一首Midi文件，若该文件有两个及以上track，则挑选出两个音符最多的track出来，否则仅取一条track  
+    对于挑选出来的track, 我们将其和弦序列与音符序列拆分出来  
+    并且, 我们将每一个和弦后面的第一个音符也提取出来放入chord_notes中
+
+    最终三个文件存放位置：
+        "data/chord/all_chords"
+        "data/note/all_notes"
+        "data/chord_notes/chord_notes"
+    '''
     if not os.path.exists("music_data"):
         raise Exception("当前目录下不存在文件夹music_data")
     # 初始的存储序号为0
@@ -105,6 +117,12 @@ def data_pure():
 
 # 将数据分为两个track, 一个旋律track, 一个正常音符track
 def data2track():
+    '''
+    数据源：music_data/*.mid  
+      
+    在这种处理方法中,　我从每一个midi文件中提取出两条最长的音轨　　
+    并且我将最长的音轨为melody, 第二条音轨为song
+    '''
     if not os.path.exists("music_data"):
         raise Exception("当前目录下不存在Music data文件夹")
     melody = []
@@ -113,6 +131,7 @@ def data2track():
         midi_stream = converter.parse(midi_file)
         num_count = convert(midi_stream)
         choose = []
+        # 找到第一条最长的音轨
         id_1 = find_max_len(num_count, -1)
         if num_count[id_1]:
             choose.append(id_1)

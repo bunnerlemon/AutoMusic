@@ -18,9 +18,9 @@ DEVICE = ("cuda" if USE_CUDA else "cpu")
 
 def train_chord():
     
-    train_input, train_output, num_chords = prepare_train_data()
+    train_input, train_output, num_chords = prepare_train_chord()
     print(num_chords)
-    val_input, val_output = prepare_val_data()
+    val_input, val_output = prepare_val_chord()
     model = LSTM_BiDir(num_chords, EMBEDDING_SIZE, HIDDENG_SIZE, NLAYERS, dropout=0.5)
     if USE_CUDA:
         model = model.cuda()

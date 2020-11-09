@@ -1,3 +1,7 @@
+'''
+generate chord作为专门生成和弦序列用
+'''
+
 import pickle
 import os
 import torch
@@ -17,6 +21,13 @@ DEVICE = ("cuda" if USE_CUDA else "cpu")
 
 
 def generate_chords():
+    '''
+    generate chords 作为专门生成和弦序列用
+    
+    使用的模型: LSTM_BiDir(双向LSTM)
+
+    使用的模型参数: weight/chord_best.pth
+    '''
     all_chord = read_("data/chord/chords")
     chord_names = sorted(set(all_chord))
     num_chord = len(chord_names) 
@@ -48,6 +59,13 @@ def generate_chords():
 
 
 def create_chords(prediction_chords):
+    '''
+    param prediction_chords: 预测出来的和弦序列(仅和弦)
+
+    offset = 0.72
+
+    return: 将和弦序列按照次序组好放入 output/chordx.mid 中
+    '''
     # print(prediction_chord_duration)
     offset = 0
     output_chords = []
@@ -66,7 +84,7 @@ def create_chords(prediction_chords):
         offset += 0.72
 
     mid_stream = stream.Stream(output_chords)
-    mid_stream.write("midi", fp="output/chord6.mid")
+    mid_stream.write("midi", fp="output/chord7.mid")
 
 
 if __name__ == '__main__':

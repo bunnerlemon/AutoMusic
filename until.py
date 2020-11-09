@@ -47,52 +47,30 @@ def get_notes():
         pickle.dump(notes, filepath)
     return notes
 
-
-def create_music(prediction):
-
-    # 用神经网络预测的音乐数据生成Midi文件
-
-    offset = 0
-    output_notes = []
-
-    # 生成note 或 chord
-    for data in prediction:
-        # 若为chord
-        if('.' in data) or data.isdigit():
-            notes_in_chord = data.split('.')
-            notes = []
-            for current_note in notes_in_chord:
-                new_note = note.Note(int(current_note))
-                new_note.storedInsrument = instrument.Piano()
-                notes.append(new_note)
-            new_chord = chord.Chord(notes)
-            new_chord.offset = offset
-            output_notes.append(new_chord)
-        # 是 note
-        else:
-            new_note = note.Note(data)
-            new_note.offset = offset
-            new_note.storedInstrument = instrument.Piano()
-            output_notes.append(new_note)
-
-        offset += 0.5
-
-    midi_stream = stream.Stream(output_notes)
-    midi_stream.write('midi', fp='output1.mid')
-
-# 提取和弦, 分别存入训练集, 验证集, 训练集大小为前240首曲子
-# 分别存入 "data/chord/chords", "data/chord/train_chords", "data/chord/val_chords"
 def pure_chord():
+    '''
+    提取和弦, 分别存入训练集, 验证集
+    对于所有的和弦序列，每五个和弦序列作为一批
+    从每一批中随机抽取一个和弦序列加入验证集，剩余四个加入训练集
+    其中chords存储的是所有的和弦
+    分别存入 "data/chord/chords", "data/chord/train_chords", "data/chord/val_chords"
+    '''
     if not os.path.exists("data/chord"):
         raise Exception("data/chord 路径不存在, 请先执行 data_pure.py")
+
+    # 先从all_chords中读出所有的和弦序列
     all_chords = read_("data/chord/all_chords")
+
     chords = []
     train_chords = []
     val_chords = []
+
     for idx in range(0, len(all_chords), 5):
         end_idx = idx + 5
         if end_idx > len(all_chords):
             end_idx = len(all_chords)
+        
+        # 随机选取一条和弦序列加入验证集
         val_idx = random.randint(idx, end_idx - 1)
         for i in range(idx, end_idx):
             if i == val_idx:
@@ -110,98 +88,15 @@ def pure_chord():
     with open("data/chord/val_chord", "wb") as fp:
         pickle.dump(val_chords, fp)
 
-
-# 提取和弦的时长, 同上分为训练集, 验证集, 训练集大小为前200首曲子
-def pure_chord_duration():
-    if not os.path.exists("music"):
-        raise Exception("路径不存在")
-
-    all_chord_duration = []
-    train_chord_duration = []
-    val_chord_duration = []
-    countx = 0
-    for midi_file in glob.glob("music/*.mid"):
-        stream = converter.parse(midi_file)
-        parts = instrument.partitionByInstrument(stream)
-        if parts:
-            notes_to_parse = parts.parts[0].recurse()
-        else:
-            notes_to_parse = stream.flat.notes
-        
-        for element in notes_to_parse:
-            if isinstance(element, chord.Chord):
-                if countx < 200:
-                    train_chord_duration.append(element.quarterLength)
-                else:
-                    val_chord_duration.append(element.quarterLength)
-                all_chord_duration.append(element.quarterLength)
-        countx += 1
-        
-    if not os.path.exists("data/duration"):
-        os.mkdir("data/duration")
-    with open("data/duration/all_chord_duration", "wb") as fp:
-        pickle.dump(all_chord_duration, fp)
-    with open("data/duration/train_chord_duration", "wb") as fp:
-        pickle.dump(train_chord_duration, fp)
-    with open("data/duration/val_chord_duration", "wb") as fp:
-        pickle.dump(val_chord_duration, fp)
-
-    
-# 处理出和弦以及对应的音符序列
-def pure_chord2notes():
-    if not os.path.exists("music"):
-        raise Exception("不存在该来路径")
-    if not os.path.exists("data/chord"):
-        pure_chord()
-    
-    all_chords = read_("data/chord/chords")
-    chord_names = sorted(set(all_chords))
-    chord2int = dict((chord, num) for num, chord in enumerate(chord_names))
-
-    train_chord2notes = []
-    val_chord2notes = []
-    chord2notes = []
-    for i in range(len(chord_names)):
-        train_chord2notes.append([])
-        val_chord2notes.append([])
-        chord2notes.append([])
-    for midi_file in glob.glob("piano_song/*.MID"):
-        stream = converter.parse(midi_file)
-        parts = instrument.partitionByInstrument(stream)
-        
-        if parts:
-            notes_to_parse = parts.parts[0].recurse()
-        else:
-            notes_to_parse = stream.flat.notes
-
-        notes = []
-        for element in notes_to_parse:
-            if isinstance(element, note.Note):
-                notes.append(str(element.pitch))
-            else:
-                chord = '.'.join(str(data) for data in element.normalOrder)
-                for data in notes:
-                    chord2notes[chord2int[chord]].append(data)
-    countx = 0
-    for notes in chord2notes:
-        if len(notes) > 100:
-            limit = (len(notes) * 4) // 5
-            for i in range(0, len(notes)):
-                if i < limit:
-                    train_chord2notes[countx].append(notes[i])
-                else:
-                    val_chord2notes[countx].append(notes[i])
-        countx += 1
-    if not os.path.exists("data/chord2notes"):
-        os.mkdir("data/chord2notes")
-    with open("data/chord2notes/train_chord2notes", "wb") as fp:
-        pickle.dump(train_chord2notes, fp)
-    with open("data/chord2notes/val_chord2notes", "wb") as fp:
-        pickle.dump(val_chord2notes, fp)
-
 # 将Music中所有midi的文件的note提取出来，并分为训练集和验证集
 # 分别存入 "data/note/all_notes", "data/note/train_notes", "data/note/val_notes"
 def pure_notes():
+    '''
+    将所有的音符序列提取出来，分为训练集和验证集
+    每五条音符序列进行一次处理，每次从五条音符序列中随机抽取一条加入验证集，剩余的则加入训练集
+    notes 存储了所有的音符
+    三者分别存放于 "data/note/notes" "data/note/train_notes" "data/note/val_notes"
+    '''
     if not os.path.exists("data/note"):
         raise Exception("请先运行data_pure.py")
     all_notes = read_("data/note/all_notes")
@@ -213,6 +108,8 @@ def pure_notes():
         end_idx = idx + 5
         if end_idx > len(all_notes):
             end_idx = len(all_notes)
+
+        # 随机选取一条音符序列加入验证集
         val_idx = random.randint(idx, end_idx-1)
         for i in range(idx, end_idx):
             if i == val_idx:
@@ -233,66 +130,12 @@ def pure_notes():
         pickle.dump(val_notes, fp)
 
 
-# 将"data/melody/melody"中的数据分成训练集和验证集
-def pure_melody():
-    if not os.path.exists("data/melody/melody"):
-        raise Exception("请先运行data_pure.py")
-    melody = read_("data/melody/melody")
-    train_melody = []
-    val_melody = []
-    all_melody = []
-    for idx in range(0, len(melody), 5):
-        end_idx = idx + 5
-        if end_idx > len(melody):
-            end_idx = len(melody)
-        val_idx = random.randint(idx, end_idx - 1)
-        for i in range(idx, end_idx):
-            if i == val_idx:
-                for data in melody[i]:
-                    val_melody.append(data)
-                    all_melody.append(data)
-            else:
-                for data in melody[i]:
-                    train_melody.append(data)
-                    all_melody.append(data)
-    with open("data/melody/melodys", "wb") as fp:
-        pickle.dump(all_melody, fp)
-    with open("data/melody/train_melody", "wb") as fp:
-        pickle.dump(train_melody, fp)
-    with open("data/melody/val_melody", "wb") as fp:
-        pickle.dump(val_melody, fp)
-
-    
-def pure_song():
-    if not os.path.exists("data/song"):
-        raise Exception("请先运行data_pure.py")
-    all_song = read_("data/song/song")
-    train_song = []
-    val_song = []
-    songs = []
-    for idx in range(0, len(all_song), 5):
-        end_idx = idx + 5
-        if end_idx > len(all_song):
-            end_idx = len(all_song)
-        val_idx = random.randint(idx, end_idx - 1)
-        for i in range(idx, end_idx):
-            if i == val_idx:
-                for data in all_song[idx]:
-                    val_song.append(data)
-                    songs.append(data)
-            else:
-                for data in all_song[idx]:
-                    train_song.append(data)
-                    songs.append(data)
-    with open("data/song/songs", "wb") as fp:
-        pickle.dump(songs, fp)
-    with open("data/song/train_song", "wb") as fp:
-        pickle.dump(train_song, fp)
-    with open("data/song/val_song", "wb") as fp:
-        pickle.dump(val_song)
-
-
 def pure_sequence():
+    '''
+    pure_sequence 用来从之前提取出的两条音轨中拆分出训练集和验证集  
+    首先将所有音轨全部放入all_sequence中  
+    接着从all_sequence中,　每五条sequence随机出一条sequence加入验证集，剩余的则加入训练集
+    '''
     if not os.path.exists("data/melody/melodys"):
         raise Exception("请先运行data_pure.py")
     melodys = read_("data/melody/melody")
@@ -335,7 +178,7 @@ def read_(path):
     return out
 
 # 准备训练和弦的训练数据
-def prepare_train_data():
+def prepare_train_chord():
     if not os.path.exists("data/chord/chords"):
         pure_chord()
 
@@ -362,7 +205,7 @@ def prepare_train_data():
     return train_input, train_output, len(chord_names)
 
 # 准备训练和弦的验证数据
-def prepare_val_data():
+def prepare_val_chord():
     if not os.path.exists("data/chord"):
         pure_chord()
     val_chords = read_("data/chord/val_chord")
@@ -388,150 +231,15 @@ def prepare_val_data():
     return val_input, val_output
 
 
-# 获取时长训练数据与总体的时长总数
-def prepare_train_chord_duration_data():
-    if not os.path.exists("data/duration"):
-        pure_chord_duration()
-
-    train_chord_duration = read_("data/duration/train_chord_duration")
-    all_chord_duration = read_("data/duration/all_chord_duration")
-    chord_duration_names = sorted(set(all_chord_duration))
-    chord_duration2int = dict((chord_duration, num) for num, chord_duration in enumerate(chord_duration_names))
-
-    train_chord_duration_input = []
-    train_chord_duration_output = []
-    sequence_len = 5
-    for i in range(0, len(train_chord_duration) - sequence_len - 1):
-        sequence_in = train_chord_duration[i:i+sequence_len]
-        train_chord_duration_input.append([chord_duration2int[data] for data in sequence_in])
-        train_chord_duration_output.append(chord_duration2int[train_chord_duration[i+sequence_len]])
-    n_patterns = len(train_chord_duration_input)
-    train_chord_duration_input = np.reshape(train_chord_duration_input, (n_patterns, sequence_len))
-    train_chord_duration_input = train_chord_duration_input / float(len(chord_duration_names))
-    train_chord_duration_output = to_categorical(train_chord_duration_output, num_classes=len(chord_duration_names))
-    
-    return train_chord_duration_input, train_chord_duration_output, len(chord_duration_names)
-
-# 获取验证集时长数据
-def prepare_val_chord_duration_data():
-    if not os.path.exists("data/duration"):
-        pure_chord_duration()
-    
-    val_chord_duration = read_("data/duration/val_chord_duration")
-    all_chord_duration = read_("data/duration/all_chord_duration")
-
-    chord_duration_names = sorted(set(all_chord_duration))
-    chord_duration2int = dict((chord_duration, num) for num, chord_duration in enumerate(chord_duration_names))
-
-    val_chord_duration_input = []
-    val_chord_duration_output = []
-    sequence_len = 5
-    for i in range(0, len(val_chord_duration) - sequence_len - 1):
-        sequence_in = val_chord_duration[i:i+sequence_len]
-        val_chord_duration_input.append([chord_duration2int[data] for data in sequence_in])
-        val_chord_duration_output.append(chord_duration2int[val_chord_duration[i+sequence_len]])
-    n_patterns = len(val_chord_duration_input)
-    val_chord_duration_input = np.reshape(val_chord_duration_input, (n_patterns, sequence_len))
-    val_chord_duration_input = val_chord_duration_input / float(len(chord_duration_names))
-    val_chord_duration_output = to_categorical(val_chord_duration_output, num_classes=len(chord_duration_names))
-
-    return val_chord_duration_input, val_chord_duration_output
-
-# 准备第k个和弦-音符序列数据
-def prepare_train_chord2notes_k(k):
-    # 若文件已存在，直接读取即可
-    # if os.path.exists("data/chord2notes/train_chord2notes_input") and os.path.exists("data/chord2notes/train_chord2notes_output"):
-    #     return read_("data/chord2notes/train_chord2notes_input"), read_("data/chord2notes/train_chord2notes_output")
-    if os.path.exists("data/chord2notes/train_chord2notes_" + str(k)):
-        return read_("data/chord2notes/train_chord2notes_" + str(k) + "/train_chord2notes_input"), read_("data/chord2notes/train_chord2notes_" + str(k) + "/train_chord2notes_output")
-
-    # 若和弦到音符序列未提取出来过，需要提取
-    if not os.path.exists("data/chord2notes"):
-        pure_chord2notes()
-    # 提取所有音符
-    if not os.path.exists("data/all_notes"):
-        pure_notes()
-    train_chord2notes = read_("data/chord2notes/train_chord2notes")
-    all_chords = read_("data/chord")
-    chord_names = sorted(set(all_chords))
-    chord2int = dict((chord, num) for num, chord in enumerate(chord_names))
-    all_notes = read_("data/all_notes")
-    note_names = sorted(set(all_notes))
-    note2int = dict((note, num) for num, note in enumerate(note_names))
-    
-    train_chord2notes_input = []
-    train_chord2notes_output = []
-    notes = train_chord2notes[k]
-    if len(notes) >= 512:
-        multi_num = 2560 // len(notes)
-        if multi_num > 1:
-            length = len(notes)
-            for i in range(multi_num - 1):
-                for j in range(length):
-                    notes.append(notes[i])
-        sequence_len = 20
-        for i in range(0, len(notes) - sequence_len - 1):
-            sequence_in = [note2int[data] for data in notes[i:i+sequence_len]]
-            train_chord2notes_input.append(sequence_in)
-            train_chord2notes_output.append(note2int[notes[i+sequence_len]])
-        train_chord2notes_input = np.reshape(train_chord2notes_input, (len(train_chord2notes_input), sequence_len))
-        train_chord2notes_input = train_chord2notes_input / float(len(note_names))
-        train_chord2notes_output = to_categorical(train_chord2notes_output, num_classes=len(note_names))
-
-    if not os.path.exists("data/chord2notes/train_chord2notes_"+str(k)):
-        os.mkdir("data/chord2notes/train_chord2notes_"+str(k))
-    with open("data/chord2notes/train_chord2notes_" + str(k) + "/train_chord2notes_input", "wb") as fp:
-        pickle.dump(train_chord2notes_input, fp)
-    with open("data/chord2notes/train_chord2notes_" + str(k) + "/train_chord2notes_output", "wb") as fp:
-        pickle.dump(train_chord2notes_output, fp)
-    return train_chord2notes_input, train_chord2notes_output
-
-
-def prepare_val_chord2notes_k(k):
-    if os.path.exists("data/chord2notes/val_chord2notes_"+str(k)):
-        return read_("data/chord2notes/val_chord2notes_"+str(k)+"/val_chord2notes_input"), read_("data/chord2notes/val_chord2notes_"+str(k)+"/val_chord2notes_output")
-    if not os.path.exists("data/chord2notes"):
-        pure_chord2notes()
-    if not os.path.exists("data/all_notes"):
-        pure_notes()
-
-    val_chord2notes = read_("data/chord2notes/val_chord2notes")
-    
-    all_notes = read_("data/all_notes")
-    note_names = sorted(set(all_notes))
-    note2int = dict((note, num) for num, note in enumerate(note_names))
-
-    val_chord2notes_input = []
-    val_chord2notes_output = []
-    notes = val_chord2notes[k]
-    
-    if len(notes) >= 128:
-        multi_num = 1280 // len(notes)
-        if multi_num > 1:
-            length = len(notes)
-            for i in range(multi_num - 1):
-                for j in range(length):
-                    notes.append(notes[j])
-        sequence_len = 20
-        for i in range(0, len(notes) - sequence_len - 1):
-            sequence_in = [note2int[data] for data in notes[i:i+sequence_len]]
-            val_chord2notes_input.append(sequence_in)
-            val_chord2notes_output.append(note2int[notes[i+sequence_len]])
-        val_chord2notes_input = np.reshape(val_chord2notes_input, (len(val_chord2notes_input), sequence_len))
-        val_chord2notes_input = val_chord2notes_input / float(len(note_names))
-        val_chord2notes_output = to_categorical(val_chord2notes_output, num_classes=len(note_names))
-        
-
-    if not os.path.exists("data/chord2notes/val_chord2notes_"+str(k)):
-        os.mkdir("data/chord2notes/val_chord2notes_"+str(k))
-    with open("data/chord2notes/val_chord2notes_"+str(k)+"/val_chord2notes_input", "wb") as fp:
-        pickle.dump(val_chord2notes_input, fp)
-    with open("data/chord2notes/val_chord2notes_"+str(k)+"/val_chord2notes_output", "wb") as fp:
-        pickle.dump(val_chord2notes_output, fp)
-    return val_chord2notes_input, val_chord2notes_output
-
 # 准备音符训练序列
 def prepare_train_notes():
+    '''
+    prepare_train_notes 用于准备音符训练数据
+
+    数据来源: data/note/train_notes
+    
+    sequence_len = 10
+    '''
     if not os.path.exists("data/note/all_notes"):
         pure_notes()
     notes = read_("data/note/notes")
@@ -548,11 +256,19 @@ def prepare_train_notes():
     n_patterns = len(train_notes_input)
     train_notes_input = np.reshape(train_notes_input, (n_patterns, sequence_len))
     train_notes_input = train_notes_input / float(len(note_names))
+    # 将输出整理成01矩阵
     train_notes_output = to_categorical(train_notes_output, num_classes=len(note_names))
     return train_notes_input, train_notes_output
 
 
 def prepare_val_notes():
+    '''
+    prepare_val_notes 用于准备音符验证数据
+
+    数据来源: data/note/val_notes
+    
+    sequence_len = 10
+    '''
     if not os.path.exists("data/note"):
         pure_notes()
     notes = read_("data/note/notes")
@@ -573,113 +289,12 @@ def prepare_val_notes():
     return val_notes_input, val_notes_output
 
 
-def prepare_train_melody():
-    if not os.path.exists("data/melody/melodys"):
-        pure_melody()
-    
-    melodys = read_("data/melody/melodys")
-    melody_names = sorted(set(melodys))
-    melody2int = dict((melody, num) for num, melody in enumerate(melody_names))
-
-    train_melody = read_("data/melody/train_melody")
-
-    melody_train_input =[]
-    melody_train_output = []
-    
-    sequence_len = 10
-
-    for i in range(0, len(train_melody) - sequence_len - 1):
-        sequence_in = train_melody[i:i+sequence_len]
-        melody_train_input.append([melody2int[data] for data in sequence_in])
-        melody_train_output.append(melody2int[train_melody[i+sequence_len]])
-    n_patterns = len(melody_train_input)
-    melody_train_input = np.reshape(melody_train_input, (n_patterns, sequence_len))
-    melody_train_input = melody_train_input / float(len(melody_names))
-    melody_train_output = to_categorical(melody_train_output, len(melody_names))
-    return melody_train_input, melody_train_output
-
-
-def prepare_val_melody():
-    if not os.path.exists("data/melody/melodys"):
-        pure_melody()
-    
-    melodys = read_("data/melody/melodys")
-    melody_names = sorted(set(melodys))
-    melody2int = dict((melody, num) for num, melody in enumerate(melody_names))
-
-    val_melody = read_("data/melody/val_melody")
-
-    melody_val_intput = []
-    melody_val_output = []
-
-    sequence_len = 10
-    
-    for i in range(0, len(val_melody) - sequence_len - 1):
-        sequence_in = val_melody[i:i+sequence_len]
-        melody_val_intput.append([melody2int[data] for data in sequence_in])
-        melody_val_output.append(melody2int[val_melody[i+sequence_len]])
-    n_patterns = len(melody_val_intput)
-    melody_val_intput = np.reshape(melody_val_intput, (n_patterns, sequence_len))
-    melody_val_intput = melody_val_intput / float(len(melody_names))
-    melody_val_output = to_categorical(melody_val_output, len(melody_names))
-    return melody_val_intput, melody_val_output
-
-
-def prepare_train_song():
-    if not os.path.exists("data/song/songs"):
-        pure_song()
-    
-    songs = read_("data/song/songs")
-    song_names = sorted(set(songs))
-    song2int = dict((song, num) for num, song in enumerate(song_names))
-
-    train_song = read_("data/song/train_song")
-
-    song_train_input = []
-    song_train_output = []
-
-    sequence_len = 10
-
-    for i in range(0, len(train_song) - sequence_len - 1):
-        sequence_in = train_song[i:i+sequence_len]
-        song_train_input.append([song2int[data] for data in sequence_in])
-        song_train_output.append(song2int[train_song[i+sequence_len]])
-    n_patterns = len(song_train_input)
-    song_train_input = np.reshape(song_train_input, (n_patterns, sequence_len))
-    song_train_input = song_train_input / float(len(song_names))
-    song_train_output = to_categorical(song_train_output, len(song_names))
-    return song_train_input, song_train_output
-
-
-def prepare_val_song():
-    if not os.path.exists("data/song/songs"):
-        pure_song()
-    
-    songs = read_("data/song/songs")
-    song_names = sorted(set(songs))
-    song2int = dict((song, num) for num, song in enumerate(song_names))
-
-    val_song = read_("data/song/val_song")
-
-    song_val_input = []
-    song_val_output = []
-
-    sequence_len = 10
-
-    for i in range(0, len(val_song) - sequence_len - 1):
-        sequence_in = val_song[i:i+sequence_len]
-        song_val_input.append([song2int[data] for data in sequence_in])
-        song_val_output.append(song2int[val_song[i+sequence_len]])
-    
-    n_patterns = len(song_val_input)
-    song_val_input = np.reshape(song_val_input, (n_patterns, sequence_len))
-    song_val_input = song_val_input / float(len(song_names))
-    song_val_output = to_categorical(song_val_output, len(song_names))
-    return song_val_input, song_val_output
-
-
-# 最后一种方式
 def prepare_train_sequence():
+    '''
+    在此种数据处理方式中,　我们并没有将和弦与音符区分开来  
+    prepare_train_sequence 准备训练用的序列  
+    sequence_len = 10
+    '''
     if not os.path.exists("data/sequence"):
         pure_sequence()
 
@@ -705,6 +320,11 @@ def prepare_train_sequence():
 
 
 def prepare_val_sequence():
+    '''
+    prepare_val_sequence 准备验证序列  
+    同样的, 此种方法中并没有将和弦与音符区分开来  
+    sequence_len = 10
+    '''
     if not os.path.exists("data/sequence"):
         pure_sequence()
 
@@ -745,23 +365,23 @@ def to_categorical(y, num_classes=None, dtype='float32'):
     return categorical
   
 
-if __name__ == '__main__':
-    if not os.path.exists("data/chord2notes"):
-        pure_chord2notes()
-    train_chord2notes = read_("data/chord2notes/train_chord2notes")
-    val_chord2notes = read_("data/chord2notes/val_chord2notes")
-    notes = read_("data/all_notes")
-    note_names = sorted(set(notes))
-    print("note_names =", len(note_names))
-    print(len(train_chord2notes))
-    countx = 0
-    for notes in train_chord2notes:
-        if len(notes) > 6400:
-            countx += 1
-    print(countx)
-    countx = 0
-    for notes in val_chord2notes:
-        if len(notes) < 640:
-            countx += 1
-    print(countx)
+# if __name__ == '__main__':
+    # if not os.path.exists("data/chord2notes"):
+    #     pure_chord2notes()
+    # train_chord2notes = read_("data/chord2notes/train_chord2notes")
+    # val_chord2notes = read_("data/chord2notes/val_chord2notes")
+    # notes = read_("data/all_notes")
+    # note_names = sorted(set(notes))
+    # print("note_names =", len(note_names))
+    # print(len(train_chord2notes))
+    # countx = 0
+    # for notes in train_chord2notes:
+    #     if len(notes) > 6400:
+    #         countx += 1
+    # print(countx)
+    # countx = 0
+    # for notes in val_chord2notes:
+    #     if len(notes) < 640:
+    #         countx += 1
+    # print(countx)
 
